@@ -136,8 +136,101 @@ var _FICHA_ESTADO_META = {
 };
 
 // ════════════════════════════════════════════════════════════
-// 1. PUNTO DE ENTRADA — llamado desde pTab('fichas', btn)
+// REGISTRO DE EVALUACIONES — escalable por convención
 // ════════════════════════════════════════════════════════════
+//
+// Cada módulo de evaluación registra su metadata aquí al cargarse.
+// fichas_ui.js lo consume para mostrar la sección "Evaluaciones realizadas".
+// No requiere modificar fichas_ui.js al agregar nuevas evaluaciones.
+//
+// Convención para módulos futuros:
+//   FC_EVAL_REGISTRY['p_len_scr_01'] = {
+//     nombre:   'Screening de Lenguaje (0–3 años)',
+//     area:     'Lenguaje',
+//     tipo:     'Screening',
+//     calcGlobal: function(evalData) { return _xxxCalcGlobal(evalData); }
+//   };
+//
+var FC_EVAL_REGISTRY = {};
+
+// Registrar el Screening de Lenguaje 0–3 (se completa cuando eval_scr_len.js carga)
+// El registro real lo hace eval_scr_len.js vía document.addEventListener('DOMContentLoaded')
+// para garantizar que sus funciones estén disponibles.
+
+// Helper: obtener nombre legible de una evaluación por fichaRegistryId
+function _fcGetNombreEval(fichaRegistryId) {
+  if (!fichaRegistryId) return 'Evaluación sin nombre';
+  var entry = FC_EVAL_REGISTRY[fichaRegistryId];
+  if (entry && entry.nombre) return entry.nombre;
+  // Fallback: intentar leer del FICHAS_REGISTRY si está disponible
+  if (typeof EVAL !== 'undefined' && EVAL.FICHAS_REGISTRY) {
+    for (var cat in EVAL.FICHAS_REGISTRY) {
+      for (var area in EVAL.FICHAS_REGISTRY[cat]) {
+        for (var tipo in EVAL.FICHAS_REGISTRY[cat][area]) {
+          var fichas = EVAL.FICHAS_REGISTRY[cat][area][tipo];
+          for (var i = 0; i < fichas.length; i++) {
+            if (fichas[i].id === fichaRegistryId) return fichas[i].nombre;
+          }
+        }
+      }
+    }
+  }
+  return fichaRegistryId;
+}
+
+// Helper: construir lista de registros de evaluaciones desde p.fichasClinicas[]
+// Retorna array ordenado por fecha desc, solo fichas con evalData y fichaRegistryId
+function _fcBuildRegistros(p) {
+  if (!p || !p.fichasClinicas) return [];
+  return p.fichasClinicas
+    .filter(function(f) {
+      return f.fichaRegistryId &&
+             f.evalData &&
+             f.evalData.items &&
+             Object.keys(f.evalData.items).length > 0;
+    })
+    .map(function(f) {
+      var entry    = FC_EVAL_REGISTRY[f.fichaRegistryId] || {};
+      var nombre   = _fcGetNombreEval(f.fichaRegistryId);
+      var area     = (f.context && f.context.area) || entry.area || '—';
+      var tipo     = (f.context && f.context.tipo) || entry.tipo || '—';
+      var fecha    = f.evalData.fechaEval || (f.evalData.updatedAt || '').slice(0,10) || null;
+      var edad     = f.evalData.edadEval || null;
+      // Calcular resultado si el módulo está disponible
+      var resultado = null;
+      if (entry.calcGlobal) {
+        try { resultado = entry.calcGlobal(f.evalData); } catch(e) {}
+      }
+      // Contar ítems respondidos
+      var items = f.evalData.items || {};
+      var respondidos = Object.keys(items).filter(function(k) {
+        return items[k] && items[k].v !== undefined;
+      }).length;
+      return {
+        fichaId:     f.id,
+        fichaRegistryId: f.fichaRegistryId,
+        nombre:      nombre,
+        area:        area,
+        tipo:        tipo,
+        fecha:       fecha,
+        edad:        edad,
+        respondidos: respondidos,
+        diagnostico: f.diagnostico || '',
+        resultado:   resultado,
+        updatedAt:   f.evalData.updatedAt || f.updatedAt || '',
+      };
+    })
+    .sort(function(a, b) {
+      var da = a.fecha || a.updatedAt || '';
+      var db = b.fecha || b.updatedAt || '';
+      return db.localeCompare(da);
+    });
+}
+
+// ════════════════════════════════════════════════════════════
+// PUNTO DE ENTRADA PÚBLICO
+// ════════════════════════════════════════════════════════════
+
 function rFichas(p, c) {
   if (!c || !p) return;
 
@@ -170,6 +263,26 @@ function _renderLista(p, c) {
 }
 
 function _htmlLista(p, fichas) {
+  var registros = _fcBuildRegistros(p);
+
+  // Sección de evaluaciones realizadas
+  var evalSecHTML = '';
+  if (registros.length > 0) {
+    var cardsHTML = registros.map(function(r) {
+      return _htmlRegistroCard(r);
+    }).join('');
+    evalSecHTML =
+      '<div class="fc-eval-sec">' +
+        '<div class="fc-eval-sec-header">' +
+          '<div class="fc-eval-sec-titulo">🔬 Evaluaciones realizadas</div>' +
+          '<div class="fc-eval-sec-sub">' + registros.length +
+            (registros.length === 1 ? ' evaluación' : ' evaluaciones') +
+          '</div>' +
+        '</div>' +
+        '<div class="fc-eval-sec-list">' + cardsHTML + '</div>' +
+      '</div>';
+  }
+
   var items = fichas.length
     ? fichas.map(_htmlCard).join('')
     : '<div class="fc-empty">' +
@@ -192,7 +305,72 @@ function _htmlLista(p, fichas) {
         '<button class="btn btn-p btn-sm" id="fcBtnNueva">+ Nueva ficha</button>' +
       '</div>' +
     '</div>' +
+    evalSecHTML +
     '<div class="fc-list" id="fcList">' + items + '</div>' +
+  '</div>';
+}
+
+// Dispatcher: abre el renderer correcto para una ficha con fichaRegistryId
+// Escala por convención: cada módulo registra su renderer en FC_EVAL_REGISTRY
+function _fcAbrirEvaluacion(p, ficha, c) {
+  var entry = FC_EVAL_REGISTRY[ficha.fichaRegistryId];
+  if (entry && typeof entry.renderer === 'function') {
+    // El módulo tiene renderer registrado → usarlo
+    entry.renderer(p, c, ficha.id);
+  } else if (typeof rEvalScrLen === 'function' &&
+             ficha.fichaRegistryId && ficha.fichaRegistryId.indexOf('scr') !== -1) {
+    // Fallback temporal: si es un screening y rEvalScrLen existe
+    rEvalScrLen(p, c, ficha.id);
+  } else {
+    // Fallback final: abrir editor genérico de ficha
+    _fichaActivaId = ficha.id;
+    _renderEditor(p, ficha, c);
+  }
+}
+
+// Card individual de un registro de evaluación
+function _htmlRegistroCard(r) {
+  var fecha = r.fecha
+    ? new Date(r.fecha + (r.fecha.length === 10 ? 'T12:00:00' : '')).toLocaleDateString(
+        'es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
+
+  var interpHTML = '';
+  if (r.resultado && r.resultado.globalInterp) {
+    var interp = r.resultado.globalInterp;
+    interpHTML =
+      '<span class="fc-reg-interp" style="background:' + interp.bg +
+        ';color:' + interp.color + '">' +
+        interp.icon + ' ' + interp.label +
+      '</span>';
+  }
+
+  var areaLabel = r.area ? r.area.charAt(0).toUpperCase() + r.area.slice(1) : '—';
+  var tipoLabel = r.tipo ? r.tipo.charAt(0).toUpperCase() + r.tipo.slice(1) : '—';
+
+  var diagPreview = r.diagnostico
+    ? esc(r.diagnostico.slice(0, 90) + (r.diagnostico.length > 90 ? '…' : ''))
+    : '';
+
+  return '<div class="fc-reg-card" data-ficha-id="' + r.fichaId + '">' +
+    '<div class="fc-reg-card-top">' +
+      '<div class="fc-reg-card-meta">' +
+        '<span class="fc-reg-area">' + areaLabel + '</span>' +
+        '<span class="fc-reg-tipo">' + tipoLabel + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+        interpHTML +
+        '<span class="fc-reg-fecha">' + fecha + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="fc-reg-nombre">' + esc(r.nombre) + '</div>' +
+    (r.edad ? '<div class="fc-reg-edad">Edad: ' + esc(r.edad) + ' · ' + r.respondidos + ' ítems evaluados</div>' : '') +
+    (diagPreview ? '<div class="fc-reg-diag">' + diagPreview + '</div>' : '') +
+    '<div class="fc-reg-card-footer">' +
+      '<button class="btn btn-s btn-sm fc-reg-btn-abrir" data-ficha-id="' + r.fichaId + '">' +
+        '↗ Abrir evaluación' +
+      '</button>' +
+    '</div>' +
   '</div>';
 }
 
@@ -287,6 +465,18 @@ function _bindLista(p, fichas, c) {
       _renderTimeline(p, c);
     };
   }
+
+  // Cards de registros de evaluación — click en "↗ Abrir evaluación"
+  document.querySelectorAll('.fc-reg-btn-abrir').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var fichaId = btn.getAttribute('data-ficha-id');
+      var ficha   = fichaClinicaGet(p.id, fichaId);
+      if (!ficha) { toast('Evaluación no encontrada', 'error'); return; }
+      // Abrir el renderer correcto según fichaRegistryId
+      _fcAbrirEvaluacion(p, ficha, c);
+    });
+  });
 
   // Abrir al hacer click en botón
   document.querySelectorAll('.fc-btn-abrir').forEach(function(btn) {
@@ -945,6 +1135,33 @@ function _fichaInjectStyles() {
   var s = document.createElement('style');
   s.id  = 'fcStyles';
   s.textContent = [
+
+    // ── Sección Evaluaciones realizadas ───────────────────
+    '.fc-eval-sec{margin-bottom:22px}',
+    '.fc-eval-sec-header{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}',
+    '.fc-eval-sec-titulo{font-size:14px;font-weight:700;color:var(--text);font-family:var(--fd)}',
+    '.fc-eval-sec-sub{font-size:12px;color:var(--t3)}',
+    '.fc-eval-sec-list{display:flex;flex-direction:column;gap:8px}',
+
+    // Card de registro de evaluación
+    '.fc-reg-card{background:var(--bg2);border:1.5px solid var(--border);' +
+      'border-radius:var(--r);padding:14px 16px;transition:var(--tr)}',
+    '.fc-reg-card:hover{box-shadow:var(--sh);border-color:var(--lav-300)}',
+    '.fc-reg-card-top{display:flex;align-items:center;justify-content:space-between;' +
+      'gap:8px;margin-bottom:8px;flex-wrap:wrap}',
+    '.fc-reg-card-meta{display:flex;align-items:center;gap:6px}',
+    '.fc-reg-area{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;' +
+      'background:var(--lav-100,#F2EEF9);color:var(--lav-600,#7B5CC4)}',
+    '.fc-reg-tipo{font-size:11px;color:var(--t3);' +
+      'background:var(--bg3);padding:2px 7px;border-radius:20px}',
+    '.fc-reg-fecha{font-size:11px;color:var(--t3)}',
+    '.fc-reg-nombre{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}',
+    '.fc-reg-edad{font-size:11px;color:var(--t3);margin-bottom:6px}',
+    '.fc-reg-diag{font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px;' +
+      'border-left:2px solid var(--border);padding-left:8px}',
+    '.fc-reg-interp{display:inline-block;font-size:11px;font-weight:700;' +
+      'padding:2px 8px;border-radius:20px;white-space:nowrap}',
+    '.fc-reg-card-footer{display:flex;justify-content:flex-end}',
 
     // ── Contenedor ────────────────────────────────────────
     '.fc-wrap{padding:2px 0}',
