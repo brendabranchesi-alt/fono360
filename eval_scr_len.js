@@ -278,13 +278,17 @@ function _scrLenHtmlResumen(evalData) {
         ';color:' + g.globalInterp.color +
         ';border:1.5px solid ' + g.globalInterp.color + '20">' +
         '<div class="scr-resumen-interp-icon">' + g.globalInterp.icon + '</div>' +
-        '<div>' +
+        '<div style="flex:1">' +
           '<div class="scr-resumen-interp-label">' + g.globalInterp.label + '</div>' +
           '<div class="scr-resumen-interp-sub">' +
             g.totalRespondidos + ' de ' + g.totalItems + ' ítems evaluados · ' +
             (g.totalItems - g.totalPresentes) + ' señales de riesgo detectadas' +
           '</div>' +
         '</div>' +
+        '<button id="scrBtnVolcar" class="btn btn-p btn-sm scr-btn-volcar"' +
+          ' title="Generar texto diagnóstico desde este resultado y volcarlo a la ficha clínica">' +
+          '📋 Volcar a ficha' +
+        '</button>' +
       '</div>'
     : '';
 
@@ -383,6 +387,7 @@ function rEvalScrLen(p, c, fichaId) {
     '</div>';
 
   // Bind
+  window._scrLenVolcarCtx = { p: p, fichaId: fichaId, evalData: evalData };
   _scrLenBind(p, fichaId, evalData, c);
 }
 
@@ -402,6 +407,14 @@ function _scrLenBind(p, fichaId, evalData, c) {
         fichaLevel.style.display = '';
         c.innerHTML = '';
       }
+    };
+  }
+
+  // Botón volcar a ficha (presente cuando el resumen ya tiene interpretación)
+  var btnVolcar = document.getElementById('scrBtnVolcar');
+  if (btnVolcar) {
+    btnVolcar.onclick = function() {
+      _scrLenVolcarAFicha(p, fichaId, evalData);
     };
   }
 
@@ -486,11 +499,22 @@ function _scrLenRefreshResumen(evalData) {
   if (resumenEl) {
     resumenEl.outerHTML = newHTML || '<div id="scrResumen"></div>';
   } else {
-    // Insertar antes de la primera área si no existe
     var primerArea = document.querySelector('.scr-area');
     if (primerArea && newHTML) {
       primerArea.insertAdjacentHTML('beforebegin', newHTML);
     }
+  }
+
+  // Re-bindear botón Volcar (se recrea con el resumen)
+  var btnVolcar = document.getElementById('scrBtnVolcar');
+  if (btnVolcar && window._scrLenVolcarCtx) {
+    btnVolcar.onclick = function() {
+      _scrLenVolcarAFicha(
+        window._scrLenVolcarCtx.p,
+        window._scrLenVolcarCtx.fichaId,
+        window._scrLenVolcarCtx.evalData
+      );
+    };
   }
 
   // Actualizar stats de cada área
@@ -528,8 +552,125 @@ function _scrLenRefreshResumen(evalData) {
 }
 
 // ════════════════════════════════════════════════════════════
-// 7. ESTILOS — inyectados una sola vez
+// 8. CONEXIÓN CON FICHA CLÍNICA
+//    Genera texto diagnóstico y observaciones desde el resultado
+//    del screening y los vuelca a los campos de la ficha clínica.
+//    NO sobreescribe si el profesional ya editó el campo manualmente
+//    (verifica si está vacío o contiene texto generado previo).
 // ════════════════════════════════════════════════════════════
+
+// Genera el texto de diagnóstico a partir del resultado global
+function _scrLenGenerarDiagnostico(g, evalData) {
+  if (!g || !g.globalInterp) return '';
+  var interp = g.globalInterp;
+  var edad   = evalData.edadEval ? ' (' + evalData.edadEval + ')' : '';
+
+  var lineas = [
+    'Screening de Lenguaje 0–3 años' + edad + '.',
+    'Resultado: ' + interp.icon + ' ' + interp.label + '.',
+  ];
+
+  // Áreas con riesgo elevado
+  var areasRiesgo = [];
+  SCR_LEN_AREAS.forEach(function(area) {
+    var r = g.byArea[area.id];
+    if (r && r.interp && r.pctRiesgo >= 20) {
+      areasRiesgo.push(area.label.replace(/[^\w\s]/g, '').trim() +
+        ' (' + r.interp.label.toLowerCase() + ')');
+    }
+  });
+
+  if (areasRiesgo.length > 0) {
+    lineas.push('Áreas con señales de riesgo: ' + areasRiesgo.join(', ') + '.');
+  } else {
+    lineas.push('Sin áreas con señales de riesgo significativas.');
+  }
+
+  if (interp.label === 'Normal') {
+    lineas.push('No se observan indicadores de riesgo en la adquisición del lenguaje.');
+  } else {
+    lineas.push('Se recomienda profundización diagnóstica y seguimiento clínico.');
+  }
+
+  return lineas.join(' ');
+}
+
+// Genera el texto de observaciones con detalle de ítems ausentes
+function _scrLenGenerarObservaciones(g, evalData) {
+  if (!g) return '';
+  var lineas = [];
+
+  SCR_LEN_AREAS.forEach(function(area) {
+    var r = g.byArea[area.id];
+    if (!r || r.respondidos === 0) return;
+
+    var ausentes = area.items.filter(function(item) {
+      var entry = evalData.items && evalData.items[item.id];
+      return entry && entry.v === 0;
+    });
+
+    if (ausentes.length > 0) {
+      var nombre = area.label.replace(/[^\w\s]/g, '').trim();
+      lineas.push(nombre + ':');
+      ausentes.forEach(function(item) {
+        lineas.push('  • ' + item.texto + ' [' + item.edad + ']');
+        var obs = evalData.items[item.id].obs;
+        if (obs && obs.trim()) lineas.push('    → ' + obs.trim());
+      });
+    }
+  });
+
+  if (lineas.length === 0) return 'Sin ítems ausentes registrados.';
+  return 'Ítems ausentes por área:\n' + lineas.join('\n');
+}
+
+// Vuelca el resultado a los campos de la ficha clínica
+function _scrLenVolcarAFicha(p, fichaId, evalData) {
+  var g = _scrLenCalcGlobal(evalData);
+  if (!g || !g.globalInterp) {
+    toast('Completá al menos la mitad de los ítems antes de volcar', '');
+    return;
+  }
+
+  // Leer ficha actual para no sobreescribir contenido existente sin avisar
+  var fp = S.patients.find(function(x) { return x.id === p.id; });
+  if (!fp) return;
+  var f = fp.fichasClinicas && fp.fichasClinicas.find(function(f) { return f.id === fichaId; });
+  if (!f) return;
+
+  var diagExiste = (f.diagnostico || '').trim().length > 0;
+  var obsExiste  = (f.observaciones || '').trim().length > 0;
+
+  if (diagExiste || obsExiste) {
+    if (!confirm('La ficha clínica ya tiene contenido en Diagnóstico u Observaciones.\n¿Reemplazar con el resultado del screening?')) return;
+  }
+
+  var nuevoDiag = _scrLenGenerarDiagnostico(g, evalData);
+  var nuevaObs  = _scrLenGenerarObservaciones(g, evalData);
+
+  fichaClinicaUpdate(p.id, fichaId, {
+    diagnostico:   nuevoDiag,
+    observaciones: nuevaObs,
+  });
+
+  toast('✔ Resultado volcado a la ficha clínica', 'success');
+
+  // Actualizar visualmente si los campos están visibles en el DOM
+  var elDiag = document.getElementById('fcf_diagnostico');
+  var elObs  = document.getElementById('fcf_observaciones');
+  if (elDiag) elDiag.value = nuevoDiag;
+  if (elObs)  elObs.value  = nuevaObs;
+
+  // Marcar ficha como actualizada en el botón
+  var btn = document.getElementById('scrBtnVolcar');
+  if (btn) {
+    btn.textContent = '✔ Volcado a ficha';
+    btn.disabled    = true;
+    btn.style.opacity = '0.6';
+  }
+}
+
+
 function _scrLenInjectStyles() {
   if (document.getElementById('scrLenStyles')) return;
   var s = document.createElement('style');
@@ -621,6 +762,9 @@ function _scrLenInjectStyles() {
       'border-radius:4px;overflow:hidden}',
     '.scr-resumen-bar-fill{height:100%;border-radius:4px;' +
       'transition:width .4s cubic-bezier(.4,0,.2,1)}',
+
+    // Botón volcar a ficha
+    '.scr-btn-volcar{white-space:nowrap;flex-shrink:0;font-size:12px}',
 
     // Autosave
     '.scr-autosave{font-size:12px;font-weight:600;color:var(--t3);padding-top:4px}',
