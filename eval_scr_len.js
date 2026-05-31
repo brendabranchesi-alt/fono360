@@ -671,6 +671,24 @@ function _scrLenVolcarAFicha(p, fichaId, evalData) {
 }
 
 
+// ════════════════════════════════════════════════════════════
+// REGISTRO EN FC_EVAL_REGISTRY (fichas_ui.js)
+// Se ejecuta tras DOMContentLoaded para garantizar que
+// fichas_ui.js ya declaró FC_EVAL_REGISTRY.
+// Patrón que deben seguir todas las evaluaciones futuras.
+// ════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof FC_EVAL_REGISTRY !== 'undefined') {
+    FC_EVAL_REGISTRY['p_len_scr_01'] = {
+      nombre:     'Screening de Lenguaje (0\u20133 a\xf1os)',
+      area:       'lenguaje',
+      tipo:       'screening',
+      calcGlobal: _scrLenCalcGlobal,   // función de cálculo
+      renderer:   rEvalScrLen,          // función de renderizado
+    };
+  }
+});
+
 function _scrLenInjectStyles() {
   if (document.getElementById('scrLenStyles')) return;
   var s = document.createElement('style');
