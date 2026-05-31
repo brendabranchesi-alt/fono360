@@ -441,6 +441,9 @@ function _htmlEditor(ficha) {
       '</div>' +
     '</div>' +
 
+    // ── Resultado del screening (si existe evalData) ───────
+    _fcHtmlEvalDataBloque(ficha) +
+
     // ── Bloque diagnóstico (siempre visible) ──────────────
     '<div class="fc-bloque-base">' +
       '<div class="fc-bloque-label">' +
@@ -456,8 +459,58 @@ function _htmlEditor(ficha) {
   '</div>';
 }
 
+// Bloque informativo: muestra resumen del screening si la ficha tiene evalData
+// Se inyecta en el editor de fichas_ui.js cuando fichaRegistryId es de un screening.
+// No altera la persistencia — solo lectura visual.
+function _fcHtmlEvalDataBloque(ficha) {
+  if (!ficha || !ficha.evalData || !ficha.evalData.items) return '';
+
+  // Solo mostrar si hay ítems respondidos
+  var items = ficha.evalData.items;
+  var respondidos = Object.keys(items).filter(function(k) {
+    return items[k] && items[k].v !== undefined;
+  }).length;
+  if (respondidos === 0) return '';
+
+  // Intentar calcular resultado si SCR_LEN_AREAS está disponible (eval_scr_len.js cargado)
+  var resumenHTML = '';
+  if (typeof _scrLenCalcGlobal === 'function' && typeof SCR_LEN_AREAS !== 'undefined') {
+    var g = _scrLenCalcGlobal(ficha.evalData);
+    if (g && g.globalInterp) {
+      var interp = g.globalInterp;
+      resumenHTML =
+        '<div class="fc-eval-interp" style="background:' + interp.bg +
+          ';border:1.5px solid ' + interp.color + '30;color:' + interp.color + '">' +
+          '<span style="font-size:18px">' + interp.icon + '</span>' +
+          '<div>' +
+            '<div style="font-weight:700;font-size:13px">' + interp.label + '</div>' +
+            '<div style="font-size:11px;opacity:.8;margin-top:1px">' +
+              g.totalRespondidos + '/' + g.totalItems + ' ítems evaluados' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+  }
+
+  var fecha = ficha.evalData.fechaEval
+    ? new Date(ficha.evalData.fechaEval).toLocaleDateString('es-AR', {day:'2-digit',month:'short',year:'numeric'})
+    : '—';
+  var edad = ficha.evalData.edadEval || '—';
+
+  return '<div class="fc-eval-bloque">' +
+    '<div class="fc-eval-bloque-header">' +
+      '<span class="fc-eval-bloque-titulo">🔬 Screening realizado</span>' +
+      '<span class="fc-eval-bloque-meta">' + fecha + ' · ' + edad + '</span>' +
+    '</div>' +
+    resumenHTML +
+    '<div class="fc-eval-bloque-hint">' +
+      'El diagnóstico y observaciones pueden haber sido generados automáticamente desde el screening. ' +
+      'Editá libremente los campos de abajo.' +
+    '</div>' +
+  '</div>';
+}
+
 function _htmlCampo(campo, valor, destacado) {
-  var clsExtra = destacado ? ' fc-campo--destacado' : '';
   return '<div class="fc-campo' + clsExtra + '">' +
     '<label class="fc-label" for="fcf_' + campo.id + '">' + campo.label +
       (destacado ? ' <span class="fc-campo-req">✱</span>' : '') +
@@ -1010,6 +1063,18 @@ function _fichaInjectStyles() {
       'transition:height .26s cubic-bezier(.4,0,.2,1)}',
     '.fc-sec-body--open{height:auto}',
     '.fc-sec-body-inner{padding:4px 18px 18px;display:flex;flex-direction:column;gap:14px}',
+
+    // ── Bloque resultado de screening ─────────────────────
+    '.fc-eval-bloque{background:var(--bg2);border:1.5px solid var(--border);' +
+      'border-radius:var(--r);padding:14px 16px;margin-bottom:14px}',
+    '.fc-eval-bloque-header{display:flex;align-items:center;' +
+      'justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px}',
+    '.fc-eval-bloque-titulo{font-size:12px;font-weight:700;color:var(--t2)}',
+    '.fc-eval-bloque-meta{font-size:11px;color:var(--t3)}',
+    '.fc-eval-interp{display:flex;align-items:center;gap:10px;' +
+      'border-radius:var(--rs);padding:10px 12px;margin-bottom:10px}',
+    '.fc-eval-bloque-hint{font-size:11px;color:var(--t3);font-style:italic;' +
+      'line-height:1.5;margin-top:6px}',
 
     // ── Bloque diagnóstico ────────────────────────────────────
     '.fc-bloque-base{background:var(--bg2);border:1.5px solid var(--border);' +
