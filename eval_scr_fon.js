@@ -542,7 +542,7 @@ function _scrFonGenerarDiagnostico(g, evalData) {
   SCR_FON_AREAS.forEach(function(area) {
     var r = g.byArea[area.id];
     if (r && r.interp && r.pctRiesgo >= 20) {
-      var nombre = area.label.replace(/[^\w\s\u00C0-\u017E]/gu, '').trim();
+      var nombre = area.label.replace(/[^\w\sáéíóúàèìòùäëïöüñÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÑ]/g, '').trim();
       areasRiesgo.push(nombre + ' (' + r.interp.label.toLowerCase() + ')');
     }
   });
@@ -569,7 +569,7 @@ function _scrFonGenerarObservaciones(g, evalData) {
       return entry && entry.v === 0;
     });
     if (errores.length > 0) {
-      var nombre = area.label.replace(/[^\w\s\u00C0-\u017E]/gu, '').trim();
+      var nombre = area.label.replace(/[^\w\sáéíóúàèìòùäëïöüñÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÑ]/g, '').trim();
       lineas.push(nombre + ':');
       errores.forEach(function(item) {
         lineas.push('  • ' + item.texto + ' [' + item.edad + ']');
