@@ -8115,6 +8115,31 @@ EVAL.FICHAS_REGISTRY = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ── Helper global: abre evaluación desde card del catálogo ──────────────────
+function _fcAbrirEvalCard(fichaRegistryId, renderer) {
+  var _p = S.patients.find(function(x){ return x.id === curP; });
+  var _c = document.getElementById('pTC');
+  if (!_p || !_c) { toast('Abrí el perfil del paciente primero', ''); return; }
+  if (!_p.fichasClinicas) _p.fichasClinicas = [];
+  var _ctx = { categoria: fichaRegistryId.charAt(0) === 'p' ? 'pediatrico' : 'adultos',
+               area: EVAL.nav.area || null, tipo: EVAL.nav.tipo || null };
+  var _f = _p.fichasClinicas.find(function(f){ return f.fichaRegistryId === fichaRegistryId; });
+  if (!_f) {
+    _f = fichaClinicaCreate(_p.id, fichaRegistryId, _ctx);
+    if (!_f) { toast('Error al crear la ficha', ''); return; }
+  }
+  document.querySelectorAll('#pTabs .tb-b').forEach(function(b){ b.classList.remove('on'); });
+  var _tabs = document.querySelectorAll('#pTabs .tb-b');
+  for (var i = 0; i < _tabs.length; i++) {
+    if ((_tabs[i].getAttribute('onclick') || '').indexOf("'fichas'") !== -1) {
+      _tabs[i].classList.add('on'); break;
+    }
+  }
+  if      (renderer === 'scrFon' && typeof rEvalScrFon === 'function') rEvalScrFon(_p, _c, _f.id);
+  else if (renderer === 'scrLen' && typeof rEvalScrLen === 'function') rEvalScrLen(_p, _c, _f.id);
+  else { window._fichaActivaId = _f.id; rFichas(_p, _c); }
+}
+
 // EVAL_ROUTER  —  Sistema de navegación y renderizado del nivel de fichas
 // ──────────────────────────────────────────────────────────────────────────────
 // Responsabilidades:
@@ -8237,58 +8262,9 @@ const EVAL_RENDERER = {
   _cardHTML(ficha, theme) {
     const est   = this.ESTADO[ficha.estado] || this.ESTADO.pendiente;
     const activo = ficha.estado === 'activo' && ficha.renderer;
-    const btnClick = activo && ficha.renderer === 'scrFon'
-      ? `(function(){
-  var _p=S.patients.find(function(x){return x.id===curP;});
-  var _c=document.getElementById('pTC');
-  if(!_p||!_c){toast('Abrí el perfil del paciente primero','');return;}
-  if(!_p.fichasClinicas)_p.fichasClinicas=[];
-  var _fid='${ficha.id}';
-  var _ctx={categoria:'pediatrico',area:EVAL.nav.area||null,tipo:EVAL.nav.tipo||null};
-  var _f=_p.fichasClinicas.find(function(f){return f.fichaRegistryId===_fid;});
-  if(!_f){_f=fichaClinicaCreate(_p.id,_fid,_ctx);if(!_f){toast('Error al crear la ficha','');return;}}
-  document.querySelectorAll('#pTabs .tb-b').forEach(function(b){b.classList.remove('on');});
-  var _btn=document.querySelector("#pTabs .tb-b[onclick=\\"pTab('fichas',this)\\"]");
-  if(_btn)_btn.classList.add('on');
-  rEvalScrFon(_p,_c,_f.id);
-})()`
-      : activo && ficha.renderer === 'scrLen'
-      ? `(function(){
-  var _p=S.patients.find(function(x){return x.id===curP;});
-  var _c=document.getElementById('pTC');
-  if(!_p||!_c){toast('Abrí el perfil del paciente primero','');return;}
-  if(!_p.fichasClinicas)_p.fichasClinicas=[];
-  var _fid='${ficha.id}';
-  var _ctx={categoria:'pediatrico',area:EVAL.nav.area||null,tipo:EVAL.nav.tipo||null};
-  var _f=_p.fichasClinicas.find(function(f){return f.fichaRegistryId===_fid;});
-  if(!_f){_f=fichaClinicaCreate(_p.id,_fid,_ctx);if(!_f){toast('Error al crear la ficha','');return;}}
-  document.querySelectorAll('#pTabs .tb-b').forEach(function(b){b.classList.remove('on');});
-  var _btn=document.querySelector("#pTabs .tb-b[onclick=\\"pTab('fichas',this)\\"]");
-  if(_btn)_btn.classList.add('on');
-  rEvalScrLen(_p,_c,_f.id);
-})()`
-      : activo
-      ? `EVAL_ROUTER.openFicha('${ficha.id}')`
-      : `(function(){
-  var _p=S.patients.find(function(x){return x.id===curP;});
-  var _c=document.getElementById('pTC');
-  if(!_p||!_c){toast('Abrí el perfil del paciente primero','');return;}
-  if(!_p.fichasClinicas) _p.fichasClinicas=[];
-  var _ctx={categoria:'${ficha.id}'.split('_')[0]==='p'?'pediatrico':'adultos',
-            area:EVAL.nav.area||null,
-            tipo:EVAL.nav.tipo||null};
-  var _fid='${ficha.id}';
-  var _existing=_p.fichasClinicas.find(function(f){return f.fichaRegistryId===_fid;});
-  if(!_existing){
-    _existing=fichaClinicaCreate(_p.id,_fid,_ctx);
-    if(!_existing){toast('Error al crear la ficha','');return;}
-  }
-  document.querySelectorAll('#pTabs .tb-b').forEach(function(b){b.classList.remove('on');});
-  var _btn=document.querySelector("#pTabs .tb-b[onclick=\\"pTab('fichas',this)\\"]");
-  if(_btn)_btn.classList.add('on');
-  window._fichaActivaId=_existing.id;
-  rFichas(_p,_c);
-})()`;
+    const btnClick = activo
+      ? `_fcAbrirEvalCard('${ficha.id}', '${ficha.renderer}')`
+      : `_fcAbrirEvalCard('${ficha.id}', null)`;
 
     return `
       <div class="eval-ficha-card" style="--ficha-color:${theme.color};--ficha-bg:${theme.bg}">
