@@ -350,6 +350,38 @@
         </div>
       </div>
 
+      <!-- ── NIVEL 1.5: SELECCIÓN DE PACIENTE ────────────────────────────
+           Solo visible cuando se llega desde el módulo global de Evaluaciones
+           sin un paciente activo (curP === null).
+           Si curP ya está seteado (flujo desde perfil), se salta automáticamente. -->
+      <div id="evalPacienteLevel" style="display:none">
+        <!-- Breadcrumb -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+          <button class="eval-breadcrumb-back" onclick="_evalBackToCat()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+            Categorías
+          </button>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          <span id="evalPacBreadcrumbCat" class="eval-breadcrumb-current">—</span>
+        </div>
+        <!-- Buscador -->
+        <div style="margin-bottom:16px">
+          <div class="eval-tipos-label">Seleccioná un paciente</div>
+          <input type="text" id="evalPacSearch"
+            placeholder="Buscar por nombre…"
+            oninput="_evalFiltrarPacientes(this.value)"
+            style="width:100%;box-sizing:border-box;margin-top:10px;
+                   border:1.5px solid var(--border);border-radius:var(--r);
+                   padding:10px 14px;font-size:14px;font-family:inherit;
+                   color:var(--text);background:var(--bg);
+                   transition:border-color .15s"
+            onfocus="this.style.borderColor='var(--accent)'"
+            onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <!-- Lista de pacientes -->
+        <div id="evalPacList" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+
       <!-- ── NIVEL 2: ÁREAS CLÍNICAS (oculto hasta seleccionar categoría) ──
            Las áreas originales se mantienen intactas pero se muestran
            solo después de seleccionar una categoría. -->
@@ -7562,10 +7594,21 @@ function selectEvalCat(cat) {
     ctxBadge.style.borderColor = cat === 'pediatrico' ? '#6EE7D0' : 'var(--lav-300)';
   }
 
-  const catLevel   = document.getElementById('evalCatLevel');
-  const areaLevel  = document.getElementById('evalAreaLevel');
-  const regSection = document.getElementById('evalRegisteredSection');
-  if(catLevel)  catLevel.style.display = 'none';
+  const catLevel    = document.getElementById('evalCatLevel');
+  const pacLevel    = document.getElementById('evalPacienteLevel');
+  const areaLevel   = document.getElementById('evalAreaLevel');
+  const regSection  = document.getElementById('evalRegisteredSection');
+
+  if(catLevel) catLevel.style.display = 'none';
+
+  // Bifurcación: si no hay paciente activo, mostrar selector de paciente primero
+  if(!curP){
+    _evalMostrarSelectorPaciente(cat, cfg);
+    return;
+  }
+
+  // Hay paciente activo → saltar directo al área
+  if(pacLevel) pacLevel.style.display = 'none';
   if(areaLevel){
     areaLevel.style.display = '';
     areaLevel.classList.remove('eval-ctx-adultos','eval-ctx-pediatrico');
@@ -7574,8 +7617,102 @@ function selectEvalCat(cat) {
   if(regSection) regSection.style.display = '';
 
   renderEvaluacionesGlobal();
-  EVAL.fire('onAreaEntered', cat, null);  // hook: extensión futura
+  EVAL.fire('onAreaEntered', cat, null);
 }
+
+// ── Mostrar selector de paciente (flujo desde módulo global) ─────────────────
+function _evalMostrarSelectorPaciente(cat, cfg) {
+  const pacLevel   = document.getElementById('evalPacienteLevel');
+  const areaLevel  = document.getElementById('evalAreaLevel');
+  const regSection = document.getElementById('evalRegisteredSection');
+
+  if(areaLevel)  areaLevel.style.display  = 'none';
+  if(regSection) regSection.style.display = 'none';
+  if(!pacLevel)  return;
+
+  pacLevel.style.display = '';
+
+  // Actualizar breadcrumb del nivel de pacientes
+  const bc = document.getElementById('evalPacBreadcrumbCat');
+  if(bc) bc.textContent = (cfg && cfg.label) ? cfg.label : cat;
+
+  // Limpiar buscador
+  const search = document.getElementById('evalPacSearch');
+  if(search) search.value = '';
+
+  // Renderizar lista completa (filtrada por tipo si corresponde)
+  _evalRenderPacientes(cat, '');
+}
+
+function _evalRenderPacientes(cat, query) {
+  const list = document.getElementById('evalPacList');
+  if(!list) return;
+
+  // Filtrar pacientes por categoría y búsqueda
+  const tipoFiltro = cat === 'pediatrico' ? 'Pediátrico' : 'Adulto';
+  let pacientes = (S.patients || []).filter(function(p) {
+    const matchTipo = p.type === tipoFiltro;
+    const matchQuery = !query || p.name.toLowerCase().includes(query.toLowerCase());
+    return matchTipo && matchQuery;
+  }).sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+  if(!pacientes.length) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3);font-size:14px">' +
+      (query ? 'Sin resultados para "' + query + '"' : 'Sin pacientes en esta categoría') +
+      '</div>';
+    return;
+  }
+
+  list.innerHTML = pacientes.map(function(p) {
+    var ini = (p.name || '?').split(' ').map(function(w){ return w[0]; }).join('').toUpperCase().slice(0,2);
+    var sub  = [p.age, p.phone].filter(Boolean).join(' · ');
+    return '<div class="eval-pac-card" onclick="_evalSeleccionarPaciente(\'' + p.id + '\')">' +
+      '<div class="eval-pac-avatar">' + ini + '</div>' +
+      '<div class="eval-pac-info">' +
+        '<div class="eval-pac-nombre">' + p.name + '</div>' +
+        (sub ? '<div class="eval-pac-sub">' + sub + '</div>' : '') +
+      '</div>' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>' +
+    '</div>';
+  }).join('');
+}
+
+function _evalFiltrarPacientes(query) {
+  _evalRenderPacientes(EVAL.nav.categoria, query);
+}
+
+function _evalSeleccionarPaciente(patientId) {
+  // Setea curP sin navegar al perfil del paciente
+  curP = patientId;
+  const cat = EVAL.nav.categoria;
+  const cfg = EVAL.getCat(cat) || {};
+
+  const pacLevel  = document.getElementById('evalPacienteLevel');
+  const areaLevel = document.getElementById('evalAreaLevel');
+  const regSection = document.getElementById('evalRegisteredSection');
+
+  if(pacLevel)  pacLevel.style.display  = 'none';
+  if(areaLevel){
+    areaLevel.style.display = '';
+    areaLevel.classList.remove('eval-ctx-adultos','eval-ctx-pediatrico');
+    areaLevel.classList.add(cfg.ctx || 'eval-ctx-adultos');
+  }
+  if(regSection) regSection.style.display = '';
+
+  renderEvaluacionesGlobal();
+  EVAL.fire('onAreaEntered', cat, null);
+}
+
+function _evalBackToCat() {
+  const pacLevel  = document.getElementById('evalPacienteLevel');
+  const catLevel  = document.getElementById('evalCatLevel');
+  if(pacLevel) pacLevel.style.display = 'none';
+  if(catLevel) catLevel.style.display = '';
+  EVAL.nav.categoria = null;
+  EVAL.nav.area      = null;
+  EVAL.nav.tipo      = null;
+}
+
 
 // ── L2 → L1: volver a categorías ────────────────────────────────────────────
 function backToEvalCats() {
@@ -8118,23 +8255,39 @@ EVAL.FICHAS_REGISTRY = {
 // ── Helper global: abre evaluación desde card del catálogo ──────────────────
 function _fcAbrirEvalCard(fichaRegistryId, renderer) {
   var _p = S.patients.find(function(x){ return x.id === curP; });
-  var _c = document.getElementById('pTC');
-  if (!_p || !_c) { toast('Abrí el perfil del paciente primero', ''); return; }
+  if (!_p) { toast('Seleccioná un paciente primero', ''); return; }
+
+  // Detectar contenedor según el flujo activo:
+  // Flujo A (desde perfil del paciente) → #pTC
+  // Flujo B (desde módulo global)       → #evalFichaLevel
+  var pgDetail   = document.getElementById('pg-detail');
+  var enPerfil   = pgDetail && pgDetail.style.display !== 'none';
+  var _c = enPerfil
+    ? document.getElementById('pTC')
+    : document.getElementById('evalFichaLevel');
+  if (!_c) { toast('Error: contenedor no encontrado', ''); return; }
+
   if (!_p.fichasClinicas) _p.fichasClinicas = [];
-  var _ctx = { categoria: fichaRegistryId.charAt(0) === 'p' ? 'pediatrico' : 'adultos',
+  var _ctx = { categoria: EVAL.nav.categoria || (fichaRegistryId.charAt(0) === 'p' ? 'pediatrico' : 'adultos'),
                area: EVAL.nav.area || null, tipo: EVAL.nav.tipo || null };
   var _f = _p.fichasClinicas.find(function(f){ return f.fichaRegistryId === fichaRegistryId; });
   if (!_f) {
     _f = fichaClinicaCreate(_p.id, fichaRegistryId, _ctx);
     if (!_f) { toast('Error al crear la ficha', ''); return; }
   }
-  document.querySelectorAll('#pTabs .tb-b').forEach(function(b){ b.classList.remove('on'); });
-  var _tabs = document.querySelectorAll('#pTabs .tb-b');
-  for (var i = 0; i < _tabs.length; i++) {
-    if ((_tabs[i].getAttribute('onclick') || '').indexOf("'fichas'") !== -1) {
-      _tabs[i].classList.add('on'); break;
+
+  if (enPerfil) {
+    // Flujo A: activar tab Fichas visualmente en el perfil
+    document.querySelectorAll('#pTabs .tb-b').forEach(function(b){ b.classList.remove('on'); });
+    var _tabs = document.querySelectorAll('#pTabs .tb-b');
+    for (var i = 0; i < _tabs.length; i++) {
+      if ((_tabs[i].getAttribute('onclick') || '').indexOf("'fichas'") !== -1) {
+        _tabs[i].classList.add('on'); break;
+      }
     }
   }
+
+  // Llamar renderer — idéntico en ambos flujos
   if      (renderer === 'scrFon' && typeof rEvalScrFon === 'function') rEvalScrFon(_p, _c, _f.id);
   else if (renderer === 'scrLen' && typeof rEvalScrLen === 'function') rEvalScrLen(_p, _c, _f.id);
   else { window._fichaActivaId = _f.id; rFichas(_p, _c); }
