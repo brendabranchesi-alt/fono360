@@ -3685,3 +3685,37 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .ia-filter-chip{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:var(--bg3);color:var(--t2);cursor:pointer;transition:var(--tr)}
 .ia-filter-chip:hover,.ia-filter-chip.on{border-color:var(--accent);color:var(--accent);background:var(--al)}
 
+
+/* ── Selector de paciente en módulo de Evaluaciones ── */
+.eval-pac-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: var(--tr);
+}
+.eval-pac-card:hover {
+  border-color: var(--lav-300);
+  box-shadow: var(--sh);
+  transform: translateY(-1px);
+}
+.eval-pac-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--lav-100);
+  color: var(--lav-700);
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.eval-pac-info { flex: 1; min-width: 0; }
+.eval-pac-nombre { font-size: 14px; font-weight: 600; color: var(--text); }
+.eval-pac-sub    { font-size: 12px; color: var(--t3); margin-top: 2px; }
