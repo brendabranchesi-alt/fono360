@@ -404,6 +404,8 @@ function _scrLenBind(p, fichaId, evalData, c) {
       c.innerHTML = '';
       if (typeof EVAL_ROUTER !== 'undefined' && EVAL_ROUTER.goToFichas) {
         EVAL_ROUTER.goToFichas();
+        var fichaLevel = document.getElementById('evalFichaLevel');
+        if (fichaLevel) fichaLevel.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     };
   }
