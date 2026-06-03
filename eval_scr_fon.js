@@ -393,8 +393,10 @@ function _scrFonBind(p, fichaId, evalData, c) {
   if (btnVolver) {
     btnVolver.onclick = function() {
       clearTimeout(_scrFonDebounce);
-      var fichaLevel = document.getElementById('evalFichaLevel');
-      if (fichaLevel) { fichaLevel.style.display = ''; c.innerHTML = ''; }
+      c.innerHTML = '';
+      if (typeof EVAL_ROUTER !== 'undefined' && EVAL_ROUTER.goToFichas) {
+        EVAL_ROUTER.goToFichas();
+      }
     };
   }
 

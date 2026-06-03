@@ -401,11 +401,9 @@ function _scrLenBind(p, fichaId, evalData, c) {
   if (btnVolver) {
     btnVolver.onclick = function() {
       clearTimeout(_scrLenDebounce);
-      // Volver al navegador de evaluaciones
-      var fichaLevel = document.getElementById('evalFichaLevel');
-      if (fichaLevel) {
-        fichaLevel.style.display = '';
-        c.innerHTML = '';
+      c.innerHTML = '';
+      if (typeof EVAL_ROUTER !== 'undefined' && EVAL_ROUTER.goToFichas) {
+        EVAL_ROUTER.goToFichas();
       }
     };
   }
