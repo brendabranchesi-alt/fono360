@@ -7860,7 +7860,7 @@ const _PED = {
     inicial: [
       _f('p_len_ini_01', 'Evaluación de Lenguaje Comprensivo',
          'Valoración completa de la comprensión léxica, morfosintáctica y discursiva según edad cronológica.',
-         'pendiente'),
+         'activo', 'iniLen'),
       _f('p_len_ini_02', 'Evaluación de Lenguaje Expresivo',
          'Perfil de producción verbal: morfología, sintaxis, semántica y pragmática. Incluye muestra de lenguaje espontáneo.',
          'pendiente'),
@@ -8288,7 +8288,8 @@ function _fcAbrirEvalCard(fichaRegistryId, renderer) {
   }
 
   // Llamar renderer — idéntico en ambos flujos
-  if      (renderer === 'scrFon' && typeof rEvalScrFon === 'function') rEvalScrFon(_p, _c, _f.id);
+  if      (renderer === 'iniLen' && typeof rEvalIniLen === 'function') rEvalIniLen(_p, _c, _f.id);
+  else if (renderer === 'scrFon' && typeof rEvalScrFon === 'function') rEvalScrFon(_p, _c, _f.id);
   else if (renderer === 'scrLen' && typeof rEvalScrLen === 'function') rEvalScrLen(_p, _c, _f.id);
   else { window._fichaActivaId = _f.id; rFichas(_p, _c); }
 }
@@ -10441,6 +10442,7 @@ init();
 <script src="fichas_ui.js"></script><!-- UI fichas clínicas — después de fichas.js -->
 <script src="eval_scr_len.js"></script><!-- Screening Lenguaje 0-3 — después de fichas_ui.js -->
 <script src="eval_scr_fon.js"></script><!-- Screening Fonológico 4-7 — después de eval_scr_len.js -->
+<script src="eval_ini_len.js"></script><!-- Evaluación Inicial Lenguaje — después de eval_scr_fon.js -->
 <!-- MENÚ CONTEXTUAL PACIENTES -->
 <div class="ctx-menu" id="ctxMenu">
   <div class="ctx-label" id="ctxPatName">Paciente</div>
