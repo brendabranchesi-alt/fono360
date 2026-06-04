@@ -8262,10 +8262,29 @@ function _fcAbrirEvalCard(fichaRegistryId, renderer) {
   // Flujo B (desde módulo global)       → #evalFichaLevel
   var pgDetail   = document.getElementById('pg-detail');
   var enPerfil   = pgDetail && pgDetail.style.display !== 'none';
-  var _c = enPerfil
+  var _cBase = enPerfil
     ? document.getElementById('pTC')
     : document.getElementById('evalFichaLevel');
-  if (!_c) { toast('Error: contenedor no encontrado', ''); return; }
+  if (!_cBase) { toast('Error: contenedor no encontrado', ''); return; }
+
+  // Para el módulo global: usar un div hijo dentro de evalFichaLevel
+  // para no destruir el DOM original (breadcrumb + evalFichasGrid).
+  var _c;
+  if (!enPerfil) {
+    var _existing = document.getElementById('evalRendererSlot');
+    if (!_existing) {
+      _existing = document.createElement('div');
+      _existing.id = 'evalRendererSlot';
+      _cBase.appendChild(_existing);
+    }
+    // Ocultar el contenido original del nivel (breadcrumb + grid)
+    Array.prototype.forEach.call(_cBase.children, function(ch) {
+      if (ch.id !== 'evalRendererSlot') ch.style.display = 'none';
+    });
+    _c = _existing;
+  } else {
+    _c = _cBase;
+  }
 
   if (!_p.fichasClinicas) _p.fichasClinicas = [];
   var _ctx = { categoria: EVAL.nav.categoria || (fichaRegistryId.charAt(0) === 'p' ? 'pediatrico' : 'adultos'),
