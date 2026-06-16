@@ -540,6 +540,16 @@ function _iniLenBind(p, fichaId, evalData, c) {
     btnVolver.onclick = function() {
       clearTimeout(_iniLenDebounce);
       c.innerHTML = '';
+      var slot = document.getElementById('evalRendererSlot');
+      if (slot) {
+        slot.parentNode.removeChild(slot);
+        var fichaLevel = document.getElementById('evalFichaLevel');
+        if (fichaLevel) {
+          Array.prototype.forEach.call(fichaLevel.children, function(ch) {
+            ch.style.display = '';
+          });
+        }
+      }
       if (typeof EVAL_ROUTER !== 'undefined' && EVAL_ROUTER.goToFichas) {
         EVAL_ROUTER.goToFichas();
         var fichaLevel = document.getElementById('evalFichaLevel');
